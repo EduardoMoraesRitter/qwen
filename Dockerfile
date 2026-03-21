@@ -18,8 +18,8 @@ COPY static/ static/
 # Criar pasta de sessions
 RUN mkdir -p sessions models
 
-# O modelo deve ser montado ou copiado em /app/models/
-# Ver README para instrucoes
+# Copiar modelo GGUF para dentro da imagem (necessario para Cloud Run)
+COPY models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf models/
 
 ENV PORT=8080
 ENV N_THREADS=4

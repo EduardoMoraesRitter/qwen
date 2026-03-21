@@ -1,0 +1,285 @@
+###############################################################################
+# Qwen Chat API - Testes de Rotas
+#
+# Para usar este arquivo:
+#   - VS Code: instale a extensao "REST Client" (humao.rest-client)
+#   - IntelliJ/WebStorm: suporte nativo a arquivos .http
+#   - Clique em "Send Request" acima de cada requisicao
+#
+# Troque @baseUrl para apontar para seu ambiente:
+#   - Local (Python direto):  http://localhost:8080
+#   - Docker local:           http://localhost:8080
+#   - GCP Cloud Run:          https://qwen-chat-478866638874.us-central1.run.app
+###############################################################################
+
+@baseUrl = https://qwen-chat-478866638874.us-central1.run.app
+
+
+###############################################################################
+# 1. FRONTEND
+###############################################################################
+
+### Carregar pagina principal (frontend HTML)
+GET {{baseUrl}}/
+
+###############################################################################
+# 2. CHAT - Endpoint principal
+###############################################################################
+
+### Chat simples - mensagem basica
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Ola, quem e voce?"
+}
+
+### Chat com pergunta de conhecimento
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Qual a capital do Brasil?"
+}
+
+### Chat com historico (memoria de conversa)
+# O modelo vai saber que "ela" se refere a "capital do Brasil"
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Qual a populacao dela?",
+  "history": [
+    {"role": "user", "content": "Qual a capital do Brasil?"},
+    {"role": "assistant", "content": "A capital do Brasil e Brasilia."}
+  ]
+}
+
+### Chat com session_id (salva conversa no servidor)
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Me explique o que e Docker em 3 linhas",
+  "history": [],
+  "session_id": "test-001"
+}
+
+### Chat que aciona a Tool de clima
+# O modelo deve detectar a intencao e chamar [TOOL: clima_tempo]
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Como esta o clima em Sao Paulo agora?"
+}
+
+### Chat - Tool de clima com outra cidade
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Qual a temperatura em Tokyo?"
+}
+
+### Chat - Mensagem longa / criativa
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Escreva um poema curto sobre programacao"
+}
+
+###############################################################################
+# 3. CHAT - Endpoints desabilitados (devem retornar 501)
+###############################################################################
+
+### Chat com imagem - DESABILITADO (espera 501)
+POST {{baseUrl}}/chat/image
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="message"
+
+Descreva esta imagem
+--boundary
+Content-Disposition: form-data; name="image"; filename="test.png"
+Content-Type: image/png
+
+< ./static/index.html
+--boundary--
+
+### Chat com audio - DESABILITADO (espera 501)
+POST {{baseUrl}}/chat/audio
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="audio"; filename="test.wav"
+Content-Type: audio/wav
+
+test
+--boundary--
+
+###############################################################################
+# 4. CONFIGURACOES
+###############################################################################
+
+### Ver configuracoes atuais
+GET {{baseUrl}}/config
+
+### Alterar system prompt
+POST {{baseUrl}}/config
+Content-Type: application/json
+
+{
+  "system_prompt": "Voce e um assistente especializado em programacao Python. Responda sempre em portugues com exemplos de codigo."
+}
+
+### Alterar temperatura e max_tokens
+POST {{baseUrl}}/config
+Content-Type: application/json
+
+{
+  "temperature": 1.2,
+  "max_tokens": 1024
+}
+
+### Alterar top_p
+POST {{baseUrl}}/config
+Content-Type: application/json
+
+{
+  "top_p": 0.95
+}
+
+### Alterar tudo de uma vez
+POST {{baseUrl}}/config
+Content-Type: application/json
+
+{
+  "system_prompt": "Voce e um assistente util e inteligente. Responda sempre em portugues.",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": 0.9,
+  "tools": [
+    {
+      "name": "clima_tempo",
+      "description": "Consulta a previsao do tempo atual de qualquer cidade. Use quando o usuario perguntar sobre clima, tempo, temperatura ou previsao. Responda com [TOOL: clima_tempo] nome_da_cidade",
+      "enabled": true
+    }
+  ]
+}
+
+### Desabilitar todas as tools
+POST {{baseUrl}}/config
+Content-Type: application/json
+
+{
+  "tools": []
+}
+
+### Resetar config para valores padrao
+POST {{baseUrl}}/config
+Content-Type: application/json
+
+{
+  "system_prompt": "Voce e um assistente util e inteligente. Responda sempre em portugues.",
+  "temperature": 0.7,
+  "max_tokens": 512,
+  "top_p": 0.9,
+  "tools": [
+    {
+      "name": "clima_tempo",
+      "description": "Consulta a previsao do tempo atual de qualquer cidade. Use quando o usuario perguntar sobre clima, tempo, temperatura ou previsao. Responda com [TOOL: clima_tempo] nome_da_cidade",
+      "enabled": true
+    }
+  ]
+}
+
+###############################################################################
+# 5. SESSOES DE CONVERSA
+###############################################################################
+
+### Listar todas as sessoes
+GET {{baseUrl}}/sessions
+
+### Criar nova sessao
+POST {{baseUrl}}/sessions
+
+### Ver detalhes de uma sessao (trocar o ID por um real)
+GET {{baseUrl}}/sessions/test-001
+
+### Enviar mensagem para uma sessao especifica
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Primeira mensagem desta sessao",
+  "history": [],
+  "session_id": "test-001"
+}
+
+### Ver sessao atualizada apos enviar mensagem
+GET {{baseUrl}}/sessions/test-001
+
+### Deletar uma sessao
+DELETE {{baseUrl}}/sessions/test-001
+
+### Confirmar que sessao foi deletada (deve retornar vazio)
+GET {{baseUrl}}/sessions/test-001
+
+###############################################################################
+# 6. TESTES DE FLUXO COMPLETO
+###############################################################################
+
+### Fluxo 1: Criar sessao -> Enviar mensagem -> Ver historico -> Deletar
+
+# Passo 1: Criar sessao (copie o ID retornado)
+POST {{baseUrl}}/sessions
+
+### Passo 2: Enviar mensagem (cole o ID da sessao)
+# Troque "COLE_O_ID_AQUI" pelo ID retornado no passo 1
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Ola! Esta e uma sessao de teste.",
+  "history": [],
+  "session_id": "COLE_O_ID_AQUI"
+}
+
+### Passo 3: Ver historico da sessao
+# Troque "COLE_O_ID_AQUI" pelo mesmo ID
+GET {{baseUrl}}/sessions/COLE_O_ID_AQUI
+
+### Passo 4: Deletar sessao
+# Troque "COLE_O_ID_AQUI" pelo mesmo ID
+DELETE {{baseUrl}}/sessions/COLE_O_ID_AQUI
+
+###############################################################################
+# 7. TESTE DE CARGA (envio rapido sequencial)
+###############################################################################
+
+### Pergunta 1
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Quanto e 2 + 2?"
+}
+
+### Pergunta 2
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "Cite 3 linguagens de programacao"
+}
+
+### Pergunta 3
+POST {{baseUrl}}/chat
+Content-Type: application/json
+
+{
+  "message": "O que e uma API REST?"
+}

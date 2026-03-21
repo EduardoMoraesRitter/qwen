@@ -20,6 +20,8 @@ Chatbot local usando o modelo **Qwen 2.5 1.5B Instruct** (quantizado Q4_K_M) rod
 - [Sistema de Tools](#sistema-de-tools)
 - [Sessoes de Conversa](#sessoes-de-conversa)
 - [Variaveis de Ambiente](#variaveis-de-ambiente)
+- [Usando como API REST](#usando-como-api-rest)
+- [Por que precisa de 2GB+ de RAM?](#por-que-precisa-de-2gb-de-ram)
 - [Limitacoes](#limitacoes)
 - [Solucao de Problemas](#solucao-de-problemas)
 
@@ -113,7 +115,7 @@ FastAPI (main.py)
 - `gcloud` CLI instalado e configurado
 - Artifact Registry habilitado
 - Cloud Run habilitado
-- Instancia com minimo **4GB de RAM** (recomendado)
+- Instancia com minimo **2GB de RAM** (1GB nao e suficiente, veja [Por que precisa de 2GB+](#por-que-precisa-de-2gb-de-ram))
 
 ---
 
@@ -126,6 +128,7 @@ docker-gcp/
 ├── Dockerfile          # Imagem Docker (python:3.11-slim + deps)
 ├── main.py             # Servidor FastAPI (backend completo)
 ├── requirements.txt    # Dependencias Python
+├── test.http           # Testes de todas as rotas da API (VS Code REST Client)
 ├── static/
 │   └── index.html      # Frontend completo (HTML + CSS + JS)
 ├── models/             # Pasta para o modelo GGUF (nao versionada)
@@ -338,7 +341,7 @@ gcloud run deploy qwen-chat \
   --image us-central1-docker.pkg.dev/SEU_PROJETO_ID/qwen-repo/qwen-text:latest \
   --region us-central1 \
   --platform managed \
-  --memory 4Gi \
+  --memory 2Gi \
   --cpu 2 \
   --timeout 300 \
   --max-instances 1 \
@@ -352,7 +355,7 @@ gcloud run deploy qwen-chat \
 
 | Parametro | Valor | Motivo |
 |---|---|---|
-| `--memory` | 4Gi | Modelo usa ~1.5GB + overhead |
+| `--memory` | 2Gi | Modelo usa ~1.1GB (minimo viavel, veja secao RAM) |
 | `--cpu` | 2 | Inferencia usa threads paralelas |
 | `--timeout` | 300 | Inferencia pode demorar ate 60s |
 | `--max-instances` | 1 | Evitar custos (cada instancia consome RAM) |
@@ -361,7 +364,7 @@ gcloud run deploy qwen-chat \
 
 ### Estimativa de custo GCP
 
-- **Cloud Run (2 vCPU, 4GB RAM)**: ~$0.00005/s ativo
+- **Cloud Run (2 vCPU, 2GB RAM)**: ~$0.00003/s ativo
 - **Modelo ocioso (min-instances=0)**: $0.00/mes
 - **Artifact Registry**: ~$0.10/GB/mes (~$0.19/mes para imagem de 1.9GB)
 - **Uso leve (1h/dia)**: ~$5-10/mes estimado
@@ -619,6 +622,164 @@ As sessoes sao salvas como arquivos JSON na pasta `sessions/`.
 
 ---
 
+## Usando como API REST
+
+A mesma URL que serve o frontend tambem funciona como **API REST**. Voce pode integrar em qualquer aplicacao, bot, automacao ou sistema externo.
+
+**URL base (GCP Cloud Run):**
+
+```
+https://qwen-chat-478866638874.us-central1.run.app
+```
+
+**URL base (Docker local):**
+
+```
+http://localhost:8080
+```
+
+### Exemplos de uso
+
+#### cURL
+
+```bash
+# Chat simples
+curl -X POST https://qwen-chat-478866638874.us-central1.run.app/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Qual a capital do Brasil?"}'
+
+# Chat com historico (memoria de conversa)
+curl -X POST https://qwen-chat-478866638874.us-central1.run.app/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "E qual a populacao?",
+    "history": [
+      {"role": "user", "content": "Qual a capital do Brasil?"},
+      {"role": "assistant", "content": "A capital do Brasil e Brasilia."}
+    ]
+  }'
+
+# Chat com sessao persistente
+curl -X POST https://qwen-chat-478866638874.us-central1.run.app/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Ola!", "session_id": "abc12345"}'
+```
+
+#### Python (requests)
+
+```python
+import requests
+
+BASE_URL = "https://qwen-chat-478866638874.us-central1.run.app"
+
+# Chat simples
+resp = requests.post(f"{BASE_URL}/chat", json={
+    "message": "Explique o que e machine learning em 3 linhas"
+})
+print(resp.json()["resposta"])
+
+# Chat com historico
+historico = []
+while True:
+    msg = input("Voce: ")
+    resp = requests.post(f"{BASE_URL}/chat", json={
+        "message": msg,
+        "history": historico
+    })
+    resposta = resp.json()["resposta"]
+    print(f"Qwen: {resposta}")
+    historico.append({"role": "user", "content": msg})
+    historico.append({"role": "assistant", "content": resposta})
+```
+
+#### JavaScript (fetch)
+
+```javascript
+const BASE_URL = "https://qwen-chat-478866638874.us-central1.run.app";
+
+async function chat(message, history = []) {
+  const resp = await fetch(`${BASE_URL}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history })
+  });
+  const data = await resp.json();
+  return data.resposta;
+}
+
+// Uso
+const resposta = await chat("Qual o sentido da vida?");
+console.log(resposta);
+```
+
+#### Node.js (axios)
+
+```javascript
+const axios = require("axios");
+
+const BASE_URL = "https://qwen-chat-478866638874.us-central1.run.app";
+
+async function chat(message) {
+  const { data } = await axios.post(`${BASE_URL}/chat`, {
+    message,
+    history: []
+  });
+  return data.resposta;
+}
+
+chat("Ola, tudo bem?").then(console.log);
+```
+
+### Arquivo de testes (test.http)
+
+O repositorio inclui um arquivo `test.http` que pode ser usado diretamente no **VS Code** (com a extensao REST Client) ou no **IntelliJ/WebStorm** para testar todas as rotas da API interativamente.
+
+---
+
+## Por que precisa de 2GB+ de RAM?
+
+Com 1GB o Cloud Run retorna **OOMKilled** (Out of Memory). O log exato do GCP foi:
+
+```
+Memory limit of 1024 MiB exceeded with 1096 MiB used.
+```
+
+### Detalhamento do consumo de memoria
+
+| Componente | RAM |
+|---|---|
+| Modelo GGUF carregado (Qwen 2.5 1.5B Q4_K_M) | ~950 MB |
+| KV Cache (contexto de 4096 tokens) | ~64 MB |
+| Python + FastAPI + uvicorn | ~80 MB |
+| **Total** | **~1094 MB** |
+
+O modelo em disco tem 941MB (quantizado Q4_K_M), mas quando carregado na RAM pelo `llama.cpp` ocupa ~950MB porque precisa descompactar parcialmente as tabelas de quantizacao.
+
+### Por que nao da pra reduzir?
+
+- **O modelo precisa estar inteiro na RAM** - `llama.cpp` faz mmap do arquivo, mas em containers (Cloud Run) o kernel nao faz cache eficiente de mmap, entao o modelo inteiro fica residente
+- **KV Cache e obrigatorio** - sem ele nao tem como manter contexto de conversa
+- **Python + FastAPI** sao o minimo viavel para servir HTTP
+
+### Opcoes se precisar rodar com menos RAM
+
+| Opcao | RAM necessaria | Trade-off |
+|---|---|---|
+| Modelo menor (Qwen 2.5 0.5B Q4_K_M) | ~500MB total | Respostas muito piores |
+| Reduzir `n_ctx` de 4096 para 1024 | Economiza ~48MB | Contexto muito curto |
+| Usar quantizacao Q2_K (2-bit) | ~600MB total | Qualidade degradada |
+| **Usar 2GB (recomendado)** | **~1.1GB usado** | **Sem trade-offs** |
+
+### Configuracao minima e recomendada no Cloud Run
+
+| Config | RAM | CPU | Custo estimado |
+|---|---|---|---|
+| **Minima** (funciona) | 2Gi | 1 | ~$3-5/mes (uso leve) |
+| **Recomendada** | 2Gi | 2 | ~$5-10/mes (uso leve) |
+| Confortavel | 4Gi | 2 | ~$10-15/mes (uso leve) |
+
+---
+
 ## Limitacoes
 
 - **Modelo pequeno (1.5B)**: Respostas podem ser imprecisas ou superficiais em temas complexos. Para melhor qualidade, use modelos maiores (7B, 14B) com mais RAM.
@@ -652,7 +813,7 @@ docker run -v /caminho/completo/models:/app/models qwen-text
 
 ### Erro de memoria (OOMKilled no Cloud Run)
 
-- Aumente `--memory` no deploy (minimo 4Gi)
+- Aumente `--memory` no deploy (minimo 2Gi)
 - Reduza `n_ctx` de 4096 para 2048 no main.py
 
 ### Modelo nao encontrado
