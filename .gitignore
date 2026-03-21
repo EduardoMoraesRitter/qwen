@@ -1,0 +1,6 @@
+models/*.gguf
+sessions/*.json
+config.json
+__pycache__/
+*.pyc
+.env

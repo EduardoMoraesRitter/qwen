@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f0f0f; color: #e0e0e0;
+            height: 100vh; display: flex; flex-direction: column;
+        }
+        .header {
+            background: #1a1a2e; border-bottom: 1px solid #2a2a4a;
+            padding: 14px 24px; display: flex; align-items: center; gap: 12px;
+            z-index: 10;
+        }
+        .header .logo {
+            width: 34px; height: 34px;
+            background: linear-gradient(135deg, #6c63ff, #3b82f6);
+            border-radius: 10px; display: flex; align-items: center;
+            justify-content: center; font-size: 16px; font-weight: bold; color: white;
+        }
+        .header h1 { font-size: 17px; font-weight: 600; color: #fff; }
+        .header .status {
+            font-size: 11px; padding: 3px 10px;
+            border-radius: 12px; background: #1e3a2f; color: #4ade80;
+        }
+        .header .status.offline { background: #3a1e1e; color: #f87171; }
+        .header .spacer { flex: 1; }
+        .header .config-btn {
+            background: none; border: 1px solid #2a2a4a; border-radius: 8px;
+            color: #aaa; padding: 6px 14px; font-size: 13px; cursor: pointer;
+            transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+        }
+        .header .config-btn:hover { border-color: #6c63ff; color: #fff; }
+        .header .config-btn.active { border-color: #6c63ff; color: #6c63ff; background: #1a1a3e; }
+        .main-layout { display: flex; flex: 1; overflow: hidden; }
+        .chat-wrapper { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .chat-container {
+            flex: 1; overflow-y: auto; padding: 24px;
+            display: flex; flex-direction: column; gap: 16px;
+        }
+        .message {
+            max-width: 75%; padding: 12px 16px; border-radius: 16px;
+            line-height: 1.5; font-size: 14px; word-wrap: break-word; white-space: pre-wrap;
+        }
+        .message.user {
+            align-self: flex-end; background: #2563eb; color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant {
+            align-self: flex-start; background: #1e1e2e; color: #d1d5db;
+            border: 1px solid #2a2a4a; border-bottom-left-radius: 4px;
+        }
+        .message .label { font-size: 11px; font-weight: 600; margin-bottom: 4px; opacity: 0.7; }
+        .message.user .label { color: #bfdbfe; }
+        .message.assistant .label { color: #818cf8; }
+        .typing {
+            align-self: flex-start; padding: 12px 16px; background: #1e1e2e;
+            border: 1px solid #2a2a4a; border-radius: 16px;
+            border-bottom-left-radius: 4px; display: none;
+        }
+        .typing.show { display: flex; gap: 4px; align-items: center; }
+        .typing span {
+            width: 8px; height: 8px; background: #6c63ff;
+            border-radius: 50%; animation: bounce 1.4s infinite;
+        }
+        .typing span:nth-child(2) { animation-delay: 0.2s; }
+        .typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-6px); }
+        }
+        .welcome { text-align: center; margin: auto; opacity: 0.5; }
+        .welcome h2 { font-size: 22px; margin-bottom: 8px; }
+        .welcome p { font-size: 14px; }
+        .input-area {
+            background: #1a1a2e; border-top: 1px solid #2a2a4a;
+            padding: 14px 24px; display: flex; gap: 12px;
+        }
+        .input-area textarea {
+            flex: 1; background: #0f0f1a; border: 1px solid #2a2a4a;
+            border-radius: 12px; padding: 10px 14px; color: #e0e0e0;
+            font-size: 14px; font-family: inherit; resize: none;
+            outline: none; max-height: 120px; line-height: 1.4;
+        }
+        .input-area textarea:focus { border-color: #6c63ff; }
+        .input-area textarea::placeholder { color: #555; }
+        .input-area button {
+            background: linear-gradient(135deg, #6c63ff, #3b82f6);
+            color: white; border: none; border-radius: 12px;
+            padding: 0 20px; font-size: 14px; cursor: pointer;
+            transition: opacity 0.2s; font-weight: 600;
+        }
+        .input-area button:hover { opacity: 0.85; }
+        .input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .sidebar {
+            width: 0; overflow: hidden; background: #12121f;
+            border-left: 1px solid #2a2a4a; transition: width 0.3s ease;
+            display: flex; flex-direction: column;
+        }
+        .sidebar.open { width: 380px; }
+        .sidebar-header {
+            padding: 16px 20px; border-bottom: 1px solid #2a2a4a;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .sidebar-header h2 { font-size: 15px; font-weight: 600; color: #fff; }
+        .sidebar-close {
+            background: none; border: none; color: #666; font-size: 20px;
+            cursor: pointer; padding: 0 4px;
+        }
+        .sidebar-close:hover { color: #fff; }
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 20px; }
+        .tabs { display: flex; gap: 0; margin-bottom: 20px; }
+        .tab-btn {
+            flex: 1; padding: 8px; font-size: 12px; font-weight: 600;
+            background: #1a1a2e; border: 1px solid #2a2a4a; color: #888;
+            cursor: pointer; transition: all 0.2s; text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .tab-btn:first-child { border-radius: 8px 0 0 8px; }
+        .tab-btn:last-child { border-radius: 0 8px 8px 0; }
+        .tab-btn.active { background: #6c63ff; border-color: #6c63ff; color: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .field { margin-bottom: 18px; }
+        .field label {
+            display: block; font-size: 12px; font-weight: 600; color: #999;
+            margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+        }
+        .field textarea, .field input[type="text"] {
+            width: 100%; background: #0f0f1a; border: 1px solid #2a2a4a;
+            border-radius: 8px; padding: 10px 12px; color: #e0e0e0;
+            font-size: 13px; font-family: inherit; outline: none; resize: vertical;
+        }
+        .field textarea:focus, .field input[type="text"]:focus { border-color: #6c63ff; }
+        .field .hint { font-size: 11px; color: #555; margin-top: 4px; }
+        .slider-row { display: flex; align-items: center; gap: 12px; }
+        .slider-row input[type="range"] { flex: 1; accent-color: #6c63ff; height: 4px; }
+        .slider-row .val {
+            font-size: 13px; color: #6c63ff; font-weight: 600;
+            min-width: 40px; text-align: right;
+        }
+        .tool-card {
+            background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 10px;
+            padding: 12px 14px; margin-bottom: 10px;
+        }
+        .tool-card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 6px;
+        }
+        .tool-card-header .tool-name { font-size: 13px; font-weight: 600; color: #e0e0e0; }
+        .tool-card-header .tool-toggle {
+            position: relative; width: 36px; height: 20px;
+            background: #333; border-radius: 10px; cursor: pointer; transition: background 0.2s;
+        }
+        .tool-card-header .tool-toggle.on { background: #6c63ff; }
+        .tool-card-header .tool-toggle::after {
+            content: ""; position: absolute; top: 2px; left: 2px;
+            width: 16px; height: 16px; background: #fff; border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .tool-card-header .tool-toggle.on::after { transform: translateX(16px); }
+        .tool-card .tool-desc { font-size: 12px; color: #777; line-height: 1.4; }
+        .tool-card .tool-delete {
+            background: none; border: none; color: #555; font-size: 16px;
+            cursor: pointer; padding: 0 4px; margin-left: 8px;
+        }
+        .tool-card .tool-delete:hover { color: #f87171; }
+        .add-tool-btn {
+            width: 100%; padding: 10px; background: #1a1a2e;
+            border: 1px dashed #2a2a4a; border-radius: 10px;
+            color: #6c63ff; font-size: 13px; cursor: pointer;
+            transition: all 0.2s; font-weight: 600;
+        }
+        .add-tool-btn:hover { border-color: #6c63ff; background: #1a1a3e; }
+        .add-tool-form {
+            background: #1a1a2e; border: 1px solid #6c63ff; border-radius: 10px;
+            padding: 14px; margin-bottom: 10px; display: none;
+        }
+        .add-tool-form.show { display: block; }
+        .add-tool-form input, .add-tool-form textarea {
+            width: 100%; background: #0f0f1a; border: 1px solid #2a2a4a;
+            border-radius: 6px; padding: 8px 10px; color: #e0e0e0;
+            font-size: 13px; font-family: inherit; outline: none; margin-bottom: 8px;
+        }
+        .add-tool-form input:focus, .add-tool-form textarea:focus { border-color: #6c63ff; }
+        .add-tool-actions { display: flex; gap: 8px; justify-content: flex-end; }
+        .add-tool-actions button {
+            padding: 6px 14px; border-radius: 6px; font-size: 12px;
+            font-weight: 600; cursor: pointer; border: none;
+        }
+        .btn-save { background: #6c63ff; color: #fff; }
+        .btn-cancel { background: #333; color: #aaa; }
+        .tool-badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: #1a1a3e; border: 1px solid #6c63ff; border-radius: 6px;
+            padding: 4px 10px; margin-bottom: 8px; font-size: 11px;
+            color: #818cf8; font-weight: 600;
+        }
+        .tool-badge svg { width: 12px; height: 12px; }
+        .tool-result-box {
+            background: #0f0f1a; border: 1px solid #2a2a4a; border-radius: 6px;
+            padding: 8px 10px; margin-bottom: 8px; font-size: 12px;
+            color: #999; white-space: pre-wrap; line-height: 1.4;
+        }
+        .save-bar {
+            padding: 14px 20px; border-top: 1px solid #2a2a4a;
+            display: flex; gap: 8px;
+        }
+        .save-bar button {
+            flex: 1; padding: 10px; border: none; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .save-bar .btn-primary { background: #6c63ff; color: #fff; }
+        .save-bar .btn-primary:hover { opacity: 0.85; }
+        .save-bar .btn-reset { background: #2a2a2a; color: #aaa; }
+        .save-bar .btn-reset:hover { color: #fff; }
+        .toast {
+            position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+            background: #6c63ff; color: #fff; padding: 10px 24px; border-radius: 8px;
+            font-size: 13px; font-weight: 600; opacity: 0; transition: opacity 0.3s;
+            z-index: 100; pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+        .sessions-bar {
+            width: 220px; background: #12121f; border-right: 1px solid #2a2a4a;
+            display: flex; flex-direction: column; flex-shrink: 0;
+        }
+        .sessions-bar-header {
+            padding: 14px 16px; border-bottom: 1px solid #2a2a4a;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .sessions-bar-header span { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .sessions-bar-header button {
+            background: #6c63ff; border: none; color: #fff; width: 26px; height: 26px;
+            border-radius: 6px; font-size: 16px; cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+        }
+        .sessions-bar-header button:hover { opacity: 0.85; }
+        .sessions-list { flex: 1; overflow-y: auto; padding: 8px; }
+        .session-item {
+            padding: 10px 12px; border-radius: 8px; cursor: pointer;
+            font-size: 13px; color: #aaa; margin-bottom: 2px;
+            display: flex; align-items: center; justify-content: space-between;
+            transition: background 0.15s;
+        }
+        .session-item:hover { background: #1a1a2e; }
+        .session-item.active { background: #1a1a3e; color: #fff; }
+        .session-item .s-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .session-item .s-del {
+            background: none; border: none; color: #555; font-size: 14px;
+            cursor: pointer; padding: 0 2px; display: none;
+        }
+        .session-item:hover .s-del { display: block; }
+        .session-item .s-del:hover { color: #f87171; }
+        .sessions-list::-webkit-scrollbar { width: 4px; }
+        .sessions-list::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+        .chat-container::-webkit-scrollbar, .sidebar-content::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-track, .sidebar-content::-webkit-scrollbar-track { background: transparent; }
+        .chat-container::-webkit-scrollbar-thumb, .sidebar-content::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">Q</div>
+        <h1>Qwen Chat</h1>
+        <div class="spacer"></div>
+        <div class="status" id="status">Online</div>
+        <button class="config-btn" id="configBtn" onclick="toggleSidebar()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            Config
+        </button>
+    </div>
+
+    <div class="main-layout">
+        <div class="sessions-bar">
+            <div class="sessions-bar-header">
+                <span>Conversas</span>
+                <button onclick="createSession()" title="Nova conversa">+</button>
+            </div>
+            <div class="sessions-list" id="sessionsList"></div>
+        </div>
+        <div class="chat-wrapper">
+            <div class="chat-container" id="chat">
+                <div class="welcome" id="welcome">
+                    <h2>Qwen 2.5</h2>
+                    <p>Assistente de texto. Digite sua mensagem abaixo.</p>
+                </div>
+            </div>
+            <div class="typing" id="typing"><span></span><span></span><span></span></div>
+            <div class="input-area">
+                <textarea id="input" rows="1" placeholder="Digite sua mensagem..." autofocus></textarea>
+                <button id="send">Enviar</button>
+            </div>
+        </div>
+
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Configuracoes</h2>
+                <button class="sidebar-close" onclick="toggleSidebar()">&times;</button>
+            </div>
+            <div class="sidebar-content">
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('geral', this)">Geral</button>
+                    <button class="tab-btn" onclick="switchTab('tools', this)">Tools</button>
+                </div>
+                <div class="tab-content active" id="tab-geral">
+                    <div class="field">
+                        <label>System Prompt</label>
+                        <textarea id="cfgPrompt" rows="5" placeholder="Instrucoes para o modelo..."></textarea>
+                        <div class="hint">Define a personalidade e comportamento do assistente.</div>
+                    </div>
+                    <div class="field">
+                        <label>Temperatura</label>
+                        <div class="slider-row">
+                            <input type="range" id="cfgTemp" min="0" max="200" value="70" oninput="updateSlider('cfgTemp', 'tempVal', 100)">
+                            <span class="val" id="tempVal">0.7</span>
+                        </div>
+                        <div class="hint">Mais baixo = mais preciso. Mais alto = mais criativo.</div>
+                    </div>
+                    <div class="field">
+                        <label>Max Tokens</label>
+                        <div class="slider-row">
+                            <input type="range" id="cfgMaxTok" min="64" max="4096" value="512" step="64" oninput="updateSliderInt('cfgMaxTok', 'maxTokVal')">
+                            <span class="val" id="maxTokVal">512</span>
+                        </div>
+                        <div class="hint">Limite de tokens na resposta.</div>
+                    </div>
+                    <div class="field">
+                        <label>Top P</label>
+                        <div class="slider-row">
+                            <input type="range" id="cfgTopP" min="0" max="100" value="90" oninput="updateSlider('cfgTopP', 'topPVal', 100)">
+                            <span class="val" id="topPVal">0.9</span>
+                        </div>
+                        <div class="hint">Nucleus sampling. 1.0 = considera todas as opcoes.</div>
+                    </div>
+                </div>
+                <div class="tab-content" id="tab-tools">
+                    <div class="hint" style="margin-bottom: 14px;">
+                        Defina ferramentas que o modelo pode "usar". Ele vai responder no formato [TOOL: nome] quando achar necessario.
+                    </div>
+                    <div id="toolsList"></div>
+                    <div class="add-tool-form" id="addToolForm">
+                        <input type="text" id="newToolName" placeholder="Nome da ferramenta (ex: buscar_web)">
+                        <textarea id="newToolDesc" rows="2" placeholder="Descricao (ex: Busca informacoes na internet)"></textarea>
+                        <div class="add-tool-actions">
+                            <button class="btn-cancel" onclick="toggleAddTool()">Cancelar</button>
+                            <button class="btn-save" onclick="addTool()">Adicionar</button>
+                        </div>
+                    </div>
+                    <button class="add-tool-btn" id="addToolBtn" onclick="toggleAddTool()">+ Adicionar Ferramenta</button>
+                </div>
+            </div>
+            <div class="save-bar">
+                <button class="btn-reset" onclick="resetConfig()">Resetar</button>
+                <button class="btn-primary" onclick="saveConfig()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        var chat = document.getElementById("chat");
+        var inputEl = document.getElementById("input");
+        var sendBtn = document.getElementById("send");
+        var typing = document.getElementById("typing");
+        var statusEl = document.getElementById("status");
+        var welcome = document.getElementById("welcome");
+        var sidebar = document.getElementById("sidebar");
+        var configBtn = document.getElementById("configBtn");
+        var historico = [];
+        var enviando = false;
+        var currentConfig = {};
+        var currentSessionId = null;
+
+        inputEl.addEventListener("input", function() {
+            inputEl.style.height = "auto";
+            inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + "px";
+        });
+        inputEl.addEventListener("keydown", function(e) {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); }
+        });
+        sendBtn.addEventListener("click", enviar);
+
+        function addMessage(role, text) {
+            if (welcome) welcome.style.display = "none";
+            var div = document.createElement("div");
+            div.className = "message " + role;
+            var label = document.createElement("div");
+            label.className = "label";
+            label.textContent = role === "user" ? "Voce" : "Qwen";
+            var content = document.createElement("div");
+            content.textContent = text;
+            div.appendChild(label);
+            div.appendChild(content);
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        async function enviar() {
+            if (enviando) return;
+            var texto = inputEl.value.trim();
+            if (!texto) return;
+            enviando = true;
+            sendBtn.disabled = true;
+            inputEl.value = "";
+            inputEl.style.height = "auto";
+            addMessage("user", texto);
+            typing.classList.add("show");
+            chat.appendChild(typing);
+            chat.scrollTop = chat.scrollHeight;
+            try {
+                var response = await fetch("/chat", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ message: texto, history: historico, session_id: currentSessionId })
+                });
+                typing.classList.remove("show");
+                if (response.ok) {
+                    var data = await response.json();
+                    if (data.tool_used) {
+                        addToolMessage(data.tool_used, data.tool_result, data.resposta);
+                    } else {
+                        addMessage("assistant", data.resposta);
+                    }
+                    statusEl.textContent = "Online";
+                    statusEl.className = "status";
+                    historico.push({role: "user", content: texto});
+                    historico.push({role: "assistant", content: data.resposta});
+                    if (historico.length > 20) historico = historico.slice(-20);
+                    if (currentSessionId) loadSessions();
+                } else {
+                    addMessage("assistant", "Erro: " + response.statusText);
+                }
+            } catch (e) {
+                typing.classList.remove("show");
+                addMessage("assistant", "Erro de conexao. Verifique se o servidor esta rodando.");
+                statusEl.textContent = "Offline";
+                statusEl.className = "status offline";
+            }
+            enviando = false;
+            sendBtn.disabled = false;
+            inputEl.focus();
+        }
+
+        function toggleSidebar() {
+            sidebar.classList.toggle("open");
+            configBtn.classList.toggle("active");
+            if (sidebar.classList.contains("open")) loadConfig();
+        }
+
+        function switchTab(name, btn) {
+            document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
+            document.querySelectorAll(".tab-content").forEach(function(c) { c.classList.remove("active"); });
+            btn.classList.add("active");
+            document.getElementById("tab-" + name).classList.add("active");
+        }
+
+        async function loadConfig() {
+            try {
+                var r = await fetch("/config");
+                currentConfig = await r.json();
+                document.getElementById("cfgPrompt").value = currentConfig.system_prompt || "";
+                document.getElementById("cfgTemp").value = Math.round((currentConfig.temperature || 0.7) * 100);
+                document.getElementById("tempVal").textContent = (currentConfig.temperature || 0.7).toFixed(1);
+                document.getElementById("cfgMaxTok").value = currentConfig.max_tokens || 512;
+                document.getElementById("maxTokVal").textContent = currentConfig.max_tokens || 512;
+                document.getElementById("cfgTopP").value = Math.round((currentConfig.top_p || 0.9) * 100);
+                document.getElementById("topPVal").textContent = (currentConfig.top_p || 0.9).toFixed(1);
+                renderTools(currentConfig.tools || []);
+            } catch(e) { showToast("Erro ao carregar config"); }
+        }
+
+        async function saveConfig() {
+            var payload = {
+                system_prompt: document.getElementById("cfgPrompt").value,
+                temperature: parseFloat(document.getElementById("tempVal").textContent),
+                max_tokens: parseInt(document.getElementById("maxTokVal").textContent),
+                top_p: parseFloat(document.getElementById("topPVal").textContent),
+                tools: currentConfig.tools || []
+            };
+            try {
+                var r = await fetch("/config", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify(payload)
+                });
+                currentConfig = await r.json();
+                showToast("Configuracoes salvas!");
+            } catch(e) { showToast("Erro ao salvar"); }
+        }
+
+        async function resetConfig() {
+            currentConfig = {
+                system_prompt: "Voce e um assistente util e inteligente.",
+                temperature: 0.7, max_tokens: 512, top_p: 0.9, tools: []
+            };
+            document.getElementById("cfgPrompt").value = currentConfig.system_prompt;
+            document.getElementById("cfgTemp").value = 70;
+            document.getElementById("tempVal").textContent = "0.7";
+            document.getElementById("cfgMaxTok").value = 512;
+            document.getElementById("maxTokVal").textContent = "512";
+            document.getElementById("cfgTopP").value = 90;
+            document.getElementById("topPVal").textContent = "0.9";
+            renderTools([]);
+            saveConfig();
+        }
+
+        function updateSlider(sliderId, valId, divisor) {
+            var v = document.getElementById(sliderId).value / divisor;
+            document.getElementById(valId).textContent = v.toFixed(1);
+        }
+        function updateSliderInt(sliderId, valId) {
+            document.getElementById(valId).textContent = document.getElementById(sliderId).value;
+        }
+
+        function renderTools(tools) {
+            var container = document.getElementById("toolsList");
+            container.innerHTML = "";
+            tools.forEach(function(tool, i) {
+                var card = document.createElement("div");
+                card.className = "tool-card";
+                card.innerHTML =
+                    '<div class="tool-card-header">' +
+                        '<span class="tool-name">' + escapeHtml(tool.name) + '</span>' +
+                        '<div style="display:flex;align-items:center;">' +
+                            '<div class="tool-toggle ' + (tool.enabled !== false ? 'on' : '') + '" onclick="toggleTool(' + i + ')"></div>' +
+                            '<button class="tool-delete" onclick="deleteTool(' + i + ')">&times;</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="tool-desc">' + escapeHtml(tool.description) + '</div>';
+                container.appendChild(card);
+            });
+        }
+
+        function toggleTool(index) {
+            if (!currentConfig.tools) return;
+            currentConfig.tools[index].enabled = !currentConfig.tools[index].enabled;
+            renderTools(currentConfig.tools);
+        }
+
+        function deleteTool(index) {
+            if (!currentConfig.tools) return;
+            currentConfig.tools.splice(index, 1);
+            renderTools(currentConfig.tools);
+        }
+
+        function toggleAddTool() {
+            var form = document.getElementById("addToolForm");
+            var btn = document.getElementById("addToolBtn");
+            form.classList.toggle("show");
+            btn.style.display = form.classList.contains("show") ? "none" : "block";
+            if (form.classList.contains("show")) {
+                document.getElementById("newToolName").value = "";
+                document.getElementById("newToolDesc").value = "";
+                document.getElementById("newToolName").focus();
+            }
+        }
+
+        function addTool() {
+            var name = document.getElementById("newToolName").value.trim();
+            var desc = document.getElementById("newToolDesc").value.trim();
+            if (!name || !desc) { showToast("Preencha nome e descricao"); return; }
+            if (!currentConfig.tools) currentConfig.tools = [];
+            currentConfig.tools.push({ name: name, description: desc, enabled: true });
+            renderTools(currentConfig.tools);
+            toggleAddTool();
+        }
+
+        function addToolMessage(toolName, toolResult, resposta) {
+            if (welcome) welcome.style.display = "none";
+            var div = document.createElement("div");
+            div.className = "message assistant";
+            var label = document.createElement("div");
+            label.className = "label";
+            label.textContent = "Qwen";
+            var badge = document.createElement("div");
+            badge.className = "tool-badge";
+            badge.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg> ' + escapeHtml(toolName);
+            var resultBox = document.createElement("div");
+            resultBox.className = "tool-result-box";
+            resultBox.textContent = toolResult;
+            var content = document.createElement("div");
+            content.textContent = resposta;
+            div.appendChild(label);
+            div.appendChild(badge);
+            div.appendChild(resultBox);
+            div.appendChild(content);
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            var d = document.createElement("div");
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
+        function showToast(msg) {
+            var t = document.getElementById("toast");
+            t.textContent = msg;
+            t.classList.add("show");
+            setTimeout(function() { t.classList.remove("show"); }, 2000);
+        }
+
+        async function loadSessions() {
+            try {
+                var r = await fetch("/sessions");
+                var sessions = await r.json();
+                var list = document.getElementById("sessionsList");
+                list.innerHTML = "";
+                sessions.forEach(function(s) {
+                    var item = document.createElement("div");
+                    item.className = "session-item" + (s.id === currentSessionId ? " active" : "");
+                    item.innerHTML = '<span class="s-title">' + escapeHtml(s.title) + '</span><button class="s-del" onclick="event.stopPropagation();deleteSession(\'' + s.id + '\')">&times;</button>';
+                    item.onclick = function() { switchSession(s.id); };
+                    list.appendChild(item);
+                });
+            } catch(e) {}
+        }
+
+        async function createSession() {
+            try {
+                var r = await fetch("/sessions", {method: "POST"});
+                var s = await r.json();
+                currentSessionId = s.id;
+                historico = [];
+                chat.innerHTML = '<div class="welcome" id="welcome"><h2>Qwen 2.5</h2><p>Assistente de texto. Digite sua mensagem abaixo.</p></div>';
+                welcome = document.getElementById("welcome");
+                loadSessions();
+            } catch(e) { showToast("Erro ao criar sessao"); }
+        }
+
+        async function switchSession(id) {
+            currentSessionId = id;
+            try {
+                var r = await fetch("/sessions/" + id);
+                var s = await r.json();
+                historico = [];
+                chat.innerHTML = "";
+                if (s.messages && s.messages.length > 0) {
+                    s.messages.forEach(function(m) {
+                        addMessage(m.role === "user" ? "user" : "assistant", m.content);
+                        historico.push(m);
+                    });
+                } else {
+                    chat.innerHTML = '<div class="welcome" id="welcome"><h2>Qwen 2.5</h2><p>Assistente de texto. Digite sua mensagem abaixo.</p></div>';
+                    welcome = document.getElementById("welcome");
+                }
+                loadSessions();
+            } catch(e) {}
+        }
+
+        async function deleteSession(id) {
+            try {
+                await fetch("/sessions/" + id, {method: "DELETE"});
+                if (currentSessionId === id) {
+                    currentSessionId = null;
+                    historico = [];
+                    chat.innerHTML = '<div class="welcome" id="welcome"><h2>Qwen 2.5</h2><p>Assistente de texto. Digite sua mensagem abaixo.</p></div>';
+                    welcome = document.getElementById("welcome");
+                }
+                loadSessions();
+            } catch(e) {}
+        }
+
+        statusEl.textContent = "Online";
+        statusEl.className = "status";
+        createSession();
+    </script>
+</body>
+</html>
