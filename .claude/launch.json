@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "qwen-api",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": ["-d", "Ubuntu-24.04", "-u", "eduar", "--", "bash", "--noprofile", "--norc", "-c", "cd /home/eduar/projeto-qwen && source .venv/bin/activate && python -u main.py"],
+      "port": 8002
+    }
+  ]
+}

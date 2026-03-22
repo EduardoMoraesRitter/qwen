@@ -1,0 +1,2 @@
+FROM us-central1-docker.pkg.dev/ai2024-424213/qwen-repo/qwen-text:latest
+COPY main.py /app/main.py

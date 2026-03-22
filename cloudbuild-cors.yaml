@@ -1,0 +1,4 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-f', 'Dockerfile.cors', '-t', 'us-central1-docker.pkg.dev/ai2024-424213/qwen-repo/qwen-text:latest', '.']
+images: ['us-central1-docker.pkg.dev/ai2024-424213/qwen-repo/qwen-text:latest']
