@@ -184,6 +184,19 @@ def build_system_prompt():
 
 
 # --- Routes ---
+@app.get("/health")
+def health_check():
+    try:
+        output = llm_text.create_chat_completion(
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=5,
+            temperature=0.1
+        )
+        return {"status": "ok", "model": "loaded", "response": output["choices"][0]["message"]["content"]}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail={"status": "error", "model": "failed", "detail": str(e)})
+
+
 @app.get("/")
 def serve_frontend():
     return FileResponse(str(BASE_DIR / "static" / "index.html"))

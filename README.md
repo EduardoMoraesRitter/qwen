@@ -12,6 +12,7 @@ Chatbot local usando o modelo **Qwen 2.5 1.5B Instruct** (quantizado Q4_K_M) rod
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Modelo GGUF](#modelo-gguf)
 - [Rodando Local (sem Docker)](#rodando-local-sem-docker)
+- [Rodando via WSL (Windows Subsystem for Linux)](#rodando-via-wsl-windows-subsystem-for-linux)
 - [Rodando com Docker](#rodando-com-docker)
 - [Deploy no GCP Cloud Run](#deploy-no-gcp-cloud-run)
 - [API - Endpoints](#api---endpoints)
@@ -228,6 +229,161 @@ Acesse: **http://localhost:8080**
 
 ---
 
+## Rodando via WSL (Windows Subsystem for Linux)
+
+Uma alternativa ao Docker no Windows e rodar o projeto diretamente no **WSL2** (Ubuntu). Geralmente e mais rapido que Docker para compilacao e I/O, e o acesso ao servidor continua pelo browser normal do Windows.
+
+### Pre-requisitos
+
+- WSL2 instalado com Ubuntu 22.04 ou 24.04
+- Para instalar: abra o PowerShell como administrador e execute `wsl --install`
+- Verifique as distros disponiveis: `wsl --list --verbose`
+
+### 1. Verificar ferramentas instaladas
+
+Abra o terminal do Ubuntu (WSL) e confirme que as dependencias de sistema estao presentes:
+
+```bash
+# Verificar Python
+python3 --version      # precisa ser 3.10+
+
+# Verificar compiladores (necessarios para llama-cpp-python)
+gcc --version
+cmake --version
+```
+
+Se `gcc` ou `cmake` nao estiverem instalados:
+
+```bash
+sudo apt update && sudo apt install -y python3 python3-pip python3-venv build-essential cmake
+```
+
+### 2. Navegar para o projeto
+
+Os arquivos do Windows ficam acessiveis em `/mnt/c/` dentro do WSL:
+
+```bash
+cd "/mnt/c/Users/SEU_USUARIO/OneDrive/caminho/para/Qwen"
+```
+
+> **Atencao com acentos no caminho**: se o caminho tiver caracteres especiais (ex: "Area de Trabalho"), envolva entre aspas duplas como no exemplo acima.
+
+### 3. Criar ambiente virtual Linux
+
+> A pasta `.venv` existente e para Windows e **nao funciona no Linux**. Crie um novo ambiente virtual separado.
+
+```bash
+python3 -m venv .venv-linux
+source .venv-linux/bin/activate
+```
+
+Para verificar se o venv esta ativo, o prompt deve mostrar `(.venv-linux)` no inicio.
+
+### 4. Instalar dependencias Python
+
+```bash
+pip install -r requirements.txt
+```
+
+O `llama-cpp-python` precisa ser **compilado do zero** (~2-3 minutos). Isso e normal, aguarde a compilacao terminar. Ao final voce deve ver:
+
+```
+Successfully built llama-cpp-python
+Successfully installed ... llama-cpp-python-0.3.4 ...
+```
+
+### 5. Verificar a porta antes de rodar
+
+Antes de iniciar, verifique se a porta 8080 ja esta em uso:
+
+```bash
+lsof -i :8080
+```
+
+Se aparecer algum processo listado, mate-o antes de continuar:
+
+```bash
+fuser -k 8080/tcp
+```
+
+### 6. Rodar o servidor
+
+```bash
+python main.py
+```
+
+O servidor esta pronto quando aparecer:
+
+```
+Modelo de texto carregado!
+Iniciando API Qwen (text-only) na porta 8080...
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+```
+
+Acesse no browser do Windows: **http://localhost:8080**
+
+O WSL2 faz port forwarding automatico, entao `localhost` no Windows aponta direto para o servidor rodando no Linux.
+
+### 7. Manter o processo rodando em background
+
+Se quiser rodar o servidor em background (sem travar o terminal), crie um script auxiliar:
+
+```bash
+cat > /tmp/run_qwen.sh << 'EOF'
+#!/bin/bash
+cd "/mnt/c/Users/SEU_USUARIO/OneDrive/caminho/para/Qwen"
+source .venv-linux/bin/activate
+python main.py
+EOF
+
+chmod +x /tmp/run_qwen.sh
+```
+
+E inicie via PowerShell do Windows (abre uma janela WSL separada):
+
+```powershell
+Start-Process wsl -ArgumentList "-d Ubuntu-24.04 bash /tmp/run_qwen.sh"
+```
+
+Para verificar se esta rodando:
+
+```bash
+# Ver processo
+ps aux | grep "[p]ython main"
+
+# Testar health check
+curl http://localhost:8080/health
+```
+
+Para parar:
+
+```bash
+fuser -k 8080/tcp
+```
+
+### Opcional: GPU NVIDIA no WSL
+
+Se voce tiver uma GPU NVIDIA com drivers WSL instalados, pode habilitar aceleracao CUDA:
+
+```bash
+CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python==0.3.4
+```
+
+E no `main.py`, altere `n_gpu_layers=0` para `-1` (todas as camadas na GPU).
+
+### Solucao de Problemas WSL
+
+| Problema | Causa | Solucao |
+|---|---|---|
+| `address already in use` na porta 8080 | Processo anterior nao foi encerrado | `fuser -k 8080/tcp` |
+| Processo morre ao fechar o terminal | Processo filho do shell que encerrou | Use o script com `Start-Process` (passo 7) |
+| `gcc: command not found` | Compiladores nao instalados | `sudo apt install build-essential cmake` |
+| `.venv` nao funciona no WSL | Ambiente virtual criado no Windows | Crie `.venv-linux` separado (passo 3) |
+| Performance de I/O lenta | Projeto em `/mnt/c/` (filesystem Windows) | Mova para `~/projetos/qwen` dentro do WSL |
+| Porta nao acessivel no Windows | Problema de forwarding WSL | Verifique o IP com `wsl hostname -I` e acesse diretamente |
+
+---
+
 ## Rodando com Docker
 
 ### 1. Build da imagem
@@ -284,6 +440,18 @@ docker rm qwen-text
 
 ## Deploy no GCP Cloud Run
 
+### Variaveis do projeto
+
+| Variavel | Valor |
+|---|---|
+| `PROJECT_ID` | `ai2024-424213` |
+| `REGION` | `us-central1` |
+| `SERVICE_NAME` | `qwen-chat` |
+| `IMAGE` | `us-central1-docker.pkg.dev/ai2024-424213/qwen-repo/qwen-text:latest` |
+| `CLOUD_RUN_URL` | `https://qwen-chat-478866638874.us-central1.run.app` |
+
+Todas as variaveis estao salvas no arquivo `.env` na raiz do projeto.
+
 ### 1. Configurar projeto GCP
 
 ```bash
@@ -291,7 +459,7 @@ docker rm qwen-text
 gcloud auth login
 
 # Definir projeto
-gcloud config set project SEU_PROJETO_ID
+gcloud config set project ai2024-424213
 
 # Habilitar servicos necessarios
 gcloud services enable artifactregistry.googleapis.com
@@ -307,39 +475,43 @@ gcloud artifacts repositories create qwen-repo \
   --description="Qwen Chat Docker images"
 ```
 
-### 3. Build e push da imagem
+### 3. Build e push da imagem no Artifact Registry
+
+> **Importante**: O modelo GGUF (~941MB) precisa estar dentro da imagem para o Cloud Run funcionar (sem volume externo).
+> Certifique-se que o arquivo `models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf` está na pasta `models/` antes de buildar.
 
 ```bash
-# Configurar Docker para Artifact Registry
-gcloud auth configure-docker us-central1-docker.pkg.dev
+# Abrir o Docker Desktop (Windows) - necessario antes de qualquer comando docker
+start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
 
-# Tag da imagem
-docker tag qwen-text us-central1-docker.pkg.dev/SEU_PROJETO_ID/qwen-repo/qwen-text:latest
+# Aguardar o Docker inicializar (~15s) e confirmar que esta rodando
+docker info
 
-# Push
-docker push us-central1-docker.pkg.dev/SEU_PROJETO_ID/qwen-repo/qwen-text:latest
+# Carregar variaveis do .env
+export $(cat .env | grep -v '#' | xargs)
+
+# Configurar Docker para autenticar no Artifact Registry
+gcloud auth configure-docker $REGION-docker.pkg.dev
+
+# Build da imagem (incluindo o modelo dentro)
+docker build -t $IMAGE .
+
+# Push para o Artifact Registry
+docker push $IMAGE
 ```
 
-**Importante**: O modelo GGUF (~941MB) precisa estar dentro da imagem para o Cloud Run. Modifique o Dockerfile para incluir:
-
-```dockerfile
-# Adicione esta linha no Dockerfile antes do CMD
-COPY models/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf models/
-```
-
-Depois rebuild:
+Confirme que a imagem chegou:
 
 ```bash
-docker build -t us-central1-docker.pkg.dev/SEU_PROJETO_ID/qwen-repo/qwen-text:latest .
-docker push us-central1-docker.pkg.dev/SEU_PROJETO_ID/qwen-repo/qwen-text:latest
+gcloud artifacts docker images list $REGION-docker.pkg.dev/$PROJECT_ID/qwen-repo
 ```
 
 ### 4. Deploy no Cloud Run
 
 ```bash
 gcloud run deploy qwen-chat \
-  --image us-central1-docker.pkg.dev/SEU_PROJETO_ID/qwen-repo/qwen-text:latest \
-  --region us-central1 \
+  --image $IMAGE \
+  --region $REGION \
   --platform managed \
   --memory 2Gi \
   --cpu 2 \
@@ -350,6 +522,24 @@ gcloud run deploy qwen-chat \
   --allow-unauthenticated \
   --set-env-vars "N_THREADS=2"
 ```
+
+Ao final o comando retorna a URL do servico. Teste o health check para confirmar que o modelo carregou:
+
+```bash
+curl https://SEU_SERVICO-HASH-uc.a.run.app/health
+```
+
+Resposta esperada:
+
+```json
+{
+  "status": "ok",
+  "model": "loaded",
+  "response": "..."
+}
+```
+
+> **Dica**: A primeira requisicao pode demorar mais (cold start) pois o Cloud Run carrega o modelo na memoria (~15-30s).
 
 ### Parametros recomendados para Cloud Run
 

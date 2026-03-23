@@ -1,7 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m venv .venv)"
+      "Bash(python -m venv .venv)",
+      "Bash(gcloud config:*)",
+      "Bash(gcloud auth:*)",
+      "Bash(docker build:*)",
+      "Bash(docker info:*)",
+      "Bash(wsl --list --verbose)",
+      "Bash(docker push:*)",
+      "Bash(gcloud run:*)",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && python3 --version && ls models/\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && python3 -m venv .venv-linux && echo ''venv criado''\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"which gcc && which cmake && gcc --version | head -1 && cmake --version | head -1\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"DEBIAN_FRONTEND=noninteractive sudo apt-get install -y cmake 2>&1 | tail -5\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && source .venv-linux/bin/activate && pip install fastapi==0.115.6 uvicorn==0.34.0 requests==2.32.3 2>&1 | tail -5\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && source .venv-linux/bin/activate && pip install -r requirements.txt 2>&1\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && source .venv-linux/bin/activate && python main.py > /tmp/qwen.log 2>&1 & echo ''PID:''$!&& sleep 8 && cat /tmp/qwen.log\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"lsof -i :8080 | head -5; fuser 8080/tcp\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && source .venv-linux/bin/activate && PORT=8081 python main.py > /tmp/qwen.log 2>&1 & sleep 15 && cat /tmp/qwen.log\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && source .venv-linux/bin/activate && nohup python main.py > /tmp/qwen.log 2>&1 & disown && echo ''iniciado PID:''$!\")",
+      "Bash(wsl -d Ubuntu-24.04 -- bash -c \"sleep 15 && cat /tmp/qwen.log\")",
+      "Bash(wsl -d Ubuntu-24.04 bash -c 'sleep 15 && ps aux | grep \"\"[p]ython main\"\" && curl -s http://localhost:8080/health')"
     ]
   }
 }
