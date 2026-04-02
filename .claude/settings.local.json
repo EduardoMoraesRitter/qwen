@@ -20,7 +20,13 @@
       "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && source .venv-linux/bin/activate && PORT=8081 python main.py > /tmp/qwen.log 2>&1 & sleep 15 && cat /tmp/qwen.log\")",
       "Bash(wsl -d Ubuntu-24.04 -- bash -c \"cd ''/mnt/c/Users/eduar/OneDrive/Área de Trabalho/Projetos/Qwen'' && source .venv-linux/bin/activate && nohup python main.py > /tmp/qwen.log 2>&1 & disown && echo ''iniciado PID:''$!\")",
       "Bash(wsl -d Ubuntu-24.04 -- bash -c \"sleep 15 && cat /tmp/qwen.log\")",
-      "Bash(wsl -d Ubuntu-24.04 bash -c 'sleep 15 && ps aux | grep \"\"[p]ython main\"\" && curl -s http://localhost:8080/health')"
+      "Bash(wsl -d Ubuntu-24.04 bash -c 'sleep 15 && ps aux | grep \"\"[p]ython main\"\" && curl -s http://localhost:8080/health')",
+      "Bash(wsl -e bash -c \"cd /mnt/c/Users/eduar/OneDrive/'Área de Trabalho'/Projetos/Qwen && python main.py\")",
+      "Bash(wsl -e bash -c \"cd /mnt/c/Users/eduar/OneDrive/'Área de Trabalho'/Projetos/Qwen && ls && which python3\")",
+      "Bash(wsl -e bash -c \"cd /mnt/c/Users/eduar/OneDrive/'Área de Trabalho'/Projetos/Qwen && source .venv-linux/bin/activate && python main.py\")",
+      "Bash(wsl -e bash -c \"cd /mnt/c/Users/eduar/OneDrive/'Área de Trabalho'/Projetos/Qwen && source .venv-linux/bin/activate && nohup python main.py > /tmp/qwen.log 2>&1 & echo PID:$!\")",
+      "Bash(wsl -e bash -c 'cd /mnt/c/Users/eduar/OneDrive/'\\\\''Área de Trabalho'\\\\''/Projetos/Qwen && source .venv-linux/bin/activate && nohup python main.py > /tmp/qwen.log 2>&1 & PID=$! && echo PID:$PID && sleep 10 && cat /tmp/qwen.log')",
+      "Bash(wsl -e bash -c \"curl -s -X POST http://localhost:8080/chat -H 'Content-Type: application/json' -d '{\\\\\"message\\\\\": \\\\\"oi\\\\\"}'\")"
     ]
   }
 }

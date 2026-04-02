@@ -7,12 +7,10 @@
 #   - Clique em "Send Request" acima de cada requisicao
 #
 # Troque @baseUrl para apontar para seu ambiente:
-#   - Local (Python direto):  http://localhost:8080
-#   - Docker local:           http://localhost:8080
-#   - GCP Cloud Run:          https://qwen-chat-478866638874.us-central1.run.app
+#   - Local:      http://localhost:8080
 ###############################################################################
 
-@baseUrl = https://qwen-chat-478866638874.us-central1.run.app
+@baseUrl = http://localhost:8080
 
 
 ###############################################################################

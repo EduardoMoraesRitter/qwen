@@ -3,6 +3,7 @@ import os
 import re
 import json
 import uuid
+import time
 import requests as http_requests
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -30,7 +31,7 @@ app.add_middleware(
 TEXT_MODEL_PATH = str(BASE_DIR / "models" / "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf")
 llm_text = Llama(
     model_path=TEXT_MODEL_PATH,
-    n_ctx=4096,
+    n_ctx=32768,
     n_threads=int(os.environ.get("N_THREADS", "4")),
     n_gpu_layers=0,
     verbose=False
@@ -41,7 +42,7 @@ print("Modelo de texto carregado!")
 DEFAULT_CONFIG = {
     "system_prompt": "Voce e um assistente util e inteligente. Responda sempre em portugues.",
     "temperature": 0.7,
-    "max_tokens": 512,
+    "max_tokens": 4096,
     "top_p": 0.9,
     "tools": [
         {
@@ -260,12 +261,15 @@ def chat_endpoint(request: ChatRequest):
             messages.append(msg)
         messages.append({"role": "user", "content": request.message})
 
+        t0 = time.time()
         output = llm_text.create_chat_completion(
             messages=messages,
             max_tokens=config["max_tokens"],
             temperature=config["temperature"],
             top_p=config["top_p"]
         )
+        elapsed = round(time.time() - t0, 2)
+        usage = output.get("usage", {})
         resposta = output["choices"][0]["message"]["content"]
 
         tool_name, tool_result = detect_and_execute_tools(resposta)
@@ -275,12 +279,20 @@ def chat_endpoint(request: ChatRequest):
                 "role": "user",
                 "content": "[Resultado da ferramenta {}]:\n{}\n\nAgora responda ao usuario de forma natural usando essas informacoes.".format(tool_name, tool_result)
             })
+            t0b = time.time()
             output2 = llm_text.create_chat_completion(
                 messages=messages,
                 max_tokens=config["max_tokens"],
                 temperature=config["temperature"],
                 top_p=config["top_p"]
             )
+            elapsed += round(time.time() - t0b, 2)
+            usage2 = output2.get("usage", {})
+            usage = {
+                "prompt_tokens": usage.get("prompt_tokens", 0) + usage2.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0) + usage2.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0) + usage2.get("total_tokens", 0),
+            }
             resposta_final = output2["choices"][0]["message"]["content"]
 
             if request.session_id:
@@ -291,7 +303,8 @@ def chat_endpoint(request: ChatRequest):
                     session["title"] = request.message[:40]
                 save_session(session)
 
-            return {"resposta": resposta_final, "tool_used": tool_name, "tool_result": tool_result}
+            return {"resposta": resposta_final, "tool_used": tool_name, "tool_result": tool_result,
+                    "elapsed_seconds": elapsed, "usage": usage}
 
         if request.session_id:
             session = get_session(request.session_id)
@@ -301,7 +314,7 @@ def chat_endpoint(request: ChatRequest):
                 session["title"] = request.message[:40]
             save_session(session)
 
-        return {"resposta": resposta}
+        return {"resposta": resposta, "elapsed_seconds": elapsed, "usage": usage}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

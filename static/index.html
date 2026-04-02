@@ -194,6 +194,13 @@
         }
         .btn-save { background: #6c63ff; color: #fff; }
         .btn-cancel { background: #333; color: #aaa; }
+        .msg-meta {
+            font-size: 11px; color: #555; margin-top: 6px;
+            display: flex; gap: 10px; flex-wrap: wrap;
+        }
+        .msg-meta span {
+            display: flex; align-items: center; gap: 3px;
+        }
         .tool-badge {
             display: inline-flex; align-items: center; gap: 5px;
             background: #1a1a3e; border: 1px solid #6c63ff; border-radius: 6px;
@@ -386,7 +393,7 @@
         });
         sendBtn.addEventListener("click", enviar);
 
-        function addMessage(role, text) {
+        function addMessage(role, text, meta) {
             if (welcome) welcome.style.display = "none";
             var div = document.createElement("div");
             div.className = "message " + role;
@@ -397,6 +404,18 @@
             content.textContent = text;
             div.appendChild(label);
             div.appendChild(content);
+            if (meta && role === "assistant") {
+                var metaDiv = document.createElement("div");
+                metaDiv.className = "msg-meta";
+                if (meta.elapsed_seconds != null)
+                    metaDiv.innerHTML += '<span>&#9201; ' + meta.elapsed_seconds + 's</span>';
+                if (meta.usage) {
+                    metaDiv.innerHTML += '<span>&#128196; ' + (meta.usage.prompt_tokens || 0) + ' prompt</span>';
+                    metaDiv.innerHTML += '<span>&#9997; ' + (meta.usage.completion_tokens || 0) + ' completion</span>';
+                    metaDiv.innerHTML += '<span>&#931; ' + (meta.usage.total_tokens || 0) + ' total</span>';
+                }
+                div.appendChild(metaDiv);
+            }
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }
@@ -423,9 +442,9 @@
                 if (response.ok) {
                     var data = await response.json();
                     if (data.tool_used) {
-                        addToolMessage(data.tool_used, data.tool_result, data.resposta);
+                        addToolMessage(data.tool_used, data.tool_result, data.resposta, data);
                     } else {
-                        addMessage("assistant", data.resposta);
+                        addMessage("assistant", data.resposta, data);
                     }
                     statusEl.textContent = "Online";
                     statusEl.className = "status";
@@ -571,7 +590,7 @@
             toggleAddTool();
         }
 
-        function addToolMessage(toolName, toolResult, resposta) {
+        function addToolMessage(toolName, toolResult, resposta, meta) {
             if (welcome) welcome.style.display = "none";
             var div = document.createElement("div");
             div.className = "message assistant";
@@ -590,6 +609,18 @@
             div.appendChild(badge);
             div.appendChild(resultBox);
             div.appendChild(content);
+            if (meta) {
+                var metaDiv = document.createElement("div");
+                metaDiv.className = "msg-meta";
+                if (meta.elapsed_seconds != null)
+                    metaDiv.innerHTML += '<span>&#9201; ' + meta.elapsed_seconds + 's</span>';
+                if (meta.usage) {
+                    metaDiv.innerHTML += '<span>&#128196; ' + (meta.usage.prompt_tokens || 0) + ' prompt</span>';
+                    metaDiv.innerHTML += '<span>&#9997; ' + (meta.usage.completion_tokens || 0) + ' completion</span>';
+                    metaDiv.innerHTML += '<span>&#931; ' + (meta.usage.total_tokens || 0) + ' total</span>';
+                }
+                div.appendChild(metaDiv);
+            }
             chat.appendChild(div);
             chat.scrollTop = chat.scrollHeight;
         }

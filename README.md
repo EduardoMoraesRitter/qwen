@@ -24,6 +24,7 @@ Chatbot local usando o modelo **Qwen 2.5 1.5B Instruct** (quantizado Q4_K_M) rod
 - [Usando como API REST](#usando-como-api-rest)
 - [Por que precisa de 2GB+ de RAM?](#por-que-precisa-de-2gb-de-ram)
 - [Limitacoes](#limitacoes)
+- [Capacidade, Custo e Stress Test](#capacidade-custo-e-stress-test)
 - [Solucao de Problemas](#solucao-de-problemas)
 
 ---
@@ -174,7 +175,7 @@ curl -L https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen
 | Tamanho em disco | ~941MB |
 | RAM necessaria | ~1.5GB |
 | Contexto maximo | 32768 tokens |
-| Contexto configurado | 4096 tokens |
+| Contexto configurado | 32768 tokens |
 | Idiomas | Chines, Ingles, Portugues, +27 idiomas |
 | Licenca | Apache 2.0 |
 
@@ -323,6 +324,22 @@ INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
 Acesse no browser do Windows: **http://localhost:8080**
 
 O WSL2 faz port forwarding automatico, entao `localhost` no Windows aponta direto para o servidor rodando no Linux.
+
+### 6.1. Reiniciar o servidor (apos mudancas de configuracao)
+
+Ative o venv, derrube o processo na porta e suba novamente:
+
+```bash
+source .venv-linux/bin/activate
+```
+
+```bash
+kill $(lsof -t -i:8080) 2>/dev/null
+```
+
+```bash
+python main.py
+```
 
 ### 7. Manter o processo rodando em background
 
@@ -594,7 +611,13 @@ Chat de texto com o modelo.
 
 ```json
 {
-  "resposta": "A capital do Brasil e Brasilia."
+  "resposta": "A capital do Brasil e Brasilia.",
+  "elapsed_seconds": 0.73,
+  "usage": {
+    "prompt_tokens": 120,
+    "completion_tokens": 11,
+    "total_tokens": 131
+  }
 }
 ```
 
@@ -604,9 +627,22 @@ Chat de texto com o modelo.
 {
   "resposta": "O clima em Sao Paulo esta parcialmente nublado com 28.9 C.",
   "tool_used": "clima_tempo",
-  "tool_result": "Clima atual em Sao Paulo, Brasil:\n- Condicao: Parcialmente nublado\n- Temperatura: 28.9 C\n- Umidade: 48%\n- Vento: 9.1 km/h"
+  "tool_result": "Clima atual em Sao Paulo, Brasil:\n- Condicao: Parcialmente nublado\n- Temperatura: 28.9 C\n- Umidade: 48%\n- Vento: 9.1 km/h",
+  "elapsed_seconds": 5.21,
+  "usage": {
+    "prompt_tokens": 340,
+    "completion_tokens": 45,
+    "total_tokens": 385
+  }
 }
 ```
+
+| Campo | Descricao |
+|---|---|
+| `elapsed_seconds` | Tempo total de inferencia em segundos (soma das duas chamadas se tool foi usada) |
+| `usage.prompt_tokens` | Tokens de entrada (system prompt + historico + mensagem) |
+| `usage.completion_tokens` | Tokens gerados na resposta |
+| `usage.total_tokens` | Soma de prompt + completion |
 
 ### `POST /chat/image`
 
@@ -715,7 +751,7 @@ As configuracoes podem ser alteradas pelo frontend (botao Config) ou via API `PO
 |---|---|---|---|
 | `system_prompt` | "Voce e um assistente util..." | texto livre | Instrucoes de comportamento do modelo |
 | `temperature` | 0.7 | 0.0 - 2.0 | Criatividade. 0 = deterministico, 2 = muito aleatorio |
-| `max_tokens` | 512 | 1 - 4096 | Limite de tokens na resposta |
+| `max_tokens` | 4096 | 1 - 4096 | Limite de tokens na resposta |
 | `top_p` | 0.9 | 0.0 - 1.0 | Nucleus sampling. 1.0 = todas as opcoes |
 | `tools` | [clima_tempo] | array | Lista de ferramentas disponiveis |
 
@@ -974,7 +1010,7 @@ O modelo em disco tem 941MB (quantizado Q4_K_M), mas quando carregado na RAM pel
 
 - **Modelo pequeno (1.5B)**: Respostas podem ser imprecisas ou superficiais em temas complexos. Para melhor qualidade, use modelos maiores (7B, 14B) com mais RAM.
 - **Apenas CPU**: Inferencia leva 5-30 segundos por resposta dependendo do tamanho. GPU aceleraria 10-50x.
-- **Contexto de 4096 tokens**: Conversas longas podem perder contexto. O historico e limitado a 20 mensagens.
+- **Contexto de 32768 tokens**: Conversas muito longas podem ainda assim atingir o limite. O historico e limitado a 20 mensagens no frontend, mas o system prompt e tokens de entrada ja consomem parte do contexto.
 - **Sem streaming**: A resposta e retornada inteira, nao token por token. O frontend mostra animacao de "digitando" enquanto espera.
 - **Sessoes em disco**: No Cloud Run, sessoes sao perdidas ao escalar para zero. Use Redis/Firestore para persistencia.
 - **Sem autenticacao**: Qualquer pessoa com a URL pode acessar. Adicione autenticacao se expor publicamente.
@@ -1021,6 +1057,84 @@ A tool usa a API gratuita do Open-Meteo. Verifique se o container tem acesso a i
 ```bash
 docker exec qwen-text curl -s https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m
 ```
+
+---
+
+## Capacidade, Custo e Stress Test
+
+### Metricas de inferencia (CPU, Qwen 1.5B Q4_K_M)
+
+| Metrica | Valor estimado |
+|---|---|
+| Tokens por segundo | ~10-15 tok/s (CPU 4 threads) |
+| Tempo por resposta (200 tokens) | ~15-20s |
+| Requests por minuto (1 thread) | ~3-4 req/min |
+| RAM ocupada pelo modelo | ~950 MB |
+| RAM por contexto ativo (32k tokens) | ~512 MB - 1 GB |
+
+### Concorrencia e limitacoes do FastAPI
+
+O FastAPI com uvicorn e **assincrono**, mas o `llama_cpp` e **bloqueante** — ocupa a thread inteira enquanto gera tokens. Isso significa:
+
+- Requests simultaneas ficam **na fila**, nao em paralelo
+- Para paralelismo real, use `--workers N` no uvicorn, mas cada worker carrega o modelo completo na RAM
+- Uma maquina com **8 GB RAM** comporta ~4-5 workers (cada um usa ~1.5 GB)
+
+### Comparacao de custo: local vs cloud
+
+| | Servidor local / VPS | Cloud Run (GCP) | API cloud (ex: GPT-4o-mini) |
+|---|---|---|---|
+| Custo fixo | $20-50/mes | $0 (escala para zero) | $0 |
+| Custo por token | $0 | ~$0.00003/s ativo | ~$0.15/1M tokens |
+| Latencia | Alta (CPU) | Alta (CPU, cold start +15s) | Baixa (GPU) |
+| Privacidade | Total | Total | Dados vao para o provedor |
+| Break-even vs API | Qualquer volume | ~5M tokens/mes | - |
+
+### Como fazer stress test
+
+Use `locust` ou `k6` para medir o ponto de ruptura:
+
+```bash
+pip install locust
+```
+
+```python
+# locustfile.py
+from locust import HttpUser, task
+
+class QwenUser(HttpUser):
+    @task
+    def chat(self):
+        self.client.post("/chat", json={"message": "Ola, como vai?"})
+```
+
+```bash
+locust --headless -u 10 -r 2 --host http://localhost:8080
+```
+
+**O que monitorar durante o teste:**
+
+```bash
+# RAM e CPU em tempo real (WSL/Linux)
+watch -n 1 'free -h && echo "---" && ps aux | grep python | head -3'
+
+# Ou via htop
+htop
+```
+
+**Sinais de saturacao:**
+- Tempo de resposta sobe linearmente (fila crescendo)
+- RAM acima de 90% → risco de OOM
+- Erros 500 ou timeouts → modelo nao consegue processar
+
+### Quanto aguenta por tamanho de maquina
+
+| Maquina | RAM | Usuarios simultaneos (estimado) | Obs |
+|---|---|---|---|
+| VPS basico | 2 GB | 1 | Modelo ocupa quase tudo |
+| VPS medio | 4 GB | 2-3 workers | Confortavel para uso pessoal |
+| VPS grande | 8 GB | 4-5 workers | Producao leve |
+| Cloud Run 2Gi | 2 GB | 1 (fila) | Cold start ~15-30s |
 
 ---
 
